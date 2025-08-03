@@ -9,26 +9,26 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
 # Select size, dataset, output, and randomState from config
-setSize = config.p1Size
-data = os.path.join("Datasets", config.p1Data)
-yIndex = config.p1YIndex
+data = config.p1Data
 randomState = config.p1RandomState
 model = "BRR"
 augmentedDataCount = config.p1N
+outputCols = config.p0OutputCols
+output = config.p1Output
+ensembleRandomSeed = config.p1EnsembleRandom
+
+# Set np randomSeed
+np.random.seed(ensembleRandomSeed)
 
 # Automating file creation
-datasetModels = "Dataset 1 Models" if "Dataset 1" in data else "Dataset 2 Models"
-output = "Film Thickness" if yIndex == -2 else "NTi"
-
-directory = os.path.join("Regression Model Data and Metrics", datasetModels, output, model)
+directory = os.path.join("Regression Model Data and Metrics", data, output, model)
 os.makedirs(directory, exist_ok=True)
-df = pd.read_csv(data)
-x = df.iloc[:, :-2].values
-# Selecting output
-y = df.iloc[:, yIndex].values
+df = pd.read_csv(os.path.join("Datasets", data))
+x = df.drop(columns=outputCols).values
+y = df[output].values  # Selecting output
 
 # 80% data to train, 20% leave for testing. random_state is set in config
-trainSize = min(setSize, int(0.8 * len(x)), len(x))
+trainSize = int(0.8 * len(x))
 xTrain, xTest, yTrain, yTest = train_test_split(x, y, train_size=trainSize, random_state=randomState)
 
 # Scaling data
@@ -50,12 +50,12 @@ xAugmented = np.random.uniform(xMin, xMax, size=(totalAugmentedX, x.shape[1]))
 xAugmentedLog = np.log1p(xAugmented)
 xAugmentedScaled = dataScaler.transform(xAugmentedLog)
 yAugmented = brr.predict(xAugmentedScaled)
-xColumns = np.array(xAugmented)
-yColumn = np.array(yAugmented)
 
-dfCSV = pd.DataFrame(np.column_stack((xColumns, yColumn)))
-saveDirectory = os.path.join(directory,
-                             f"{model} N_{augmentedDataCount} Size_{setSize} Random_{randomState} Augmented Data.csv")
-dfCSV.to_csv(saveDirectory, index=False, header=False)
+inputColNames = df.drop(columns=outputCols).columns.tolist()
+allColNames = inputColNames + [output]
+dfCSV = pd.DataFrame(np.column_stack((xAugmented, yAugmented)), columns=allColNames)
+csvName = f"{model} N_{augmentedDataCount} Random_{randomState} Augmented Data.csv"
+saveDirectory = os.path.join(directory, csvName)
+dfCSV.to_csv(saveDirectory, index=False)
 
-print(f"Finished {model} N_{augmentedDataCount} Size_{setSize} Random_{randomState} Augmented Data!")
+print(f"Finished {csvName}!")

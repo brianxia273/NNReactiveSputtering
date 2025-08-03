@@ -9,23 +9,25 @@ import config
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error, explained_variance_score
+from sklearn.metrics import mean_squared_error, explained_variance_score, mean_absolute_percentage_error
 import os
 
 # Select size, dataset, output, and randomState from config
-setSize = config.p1Size
-data = os.path.join("Datasets", config.p1Data)
-yIndex = config.p1YIndex
+data = config.p1Data
 randomState = config.p1RandomState
+outputCols = config.p0OutputCols
+output = config.p1Output
+ensembleRandomSeed = config.p1EnsembleRandom
+
+np.random.seed(ensembleRandomSeed)
 
 # Selecting dataset columns
-df = pd.read_csv(data)
-x = df.iloc[:, :-2].values
-# Selecting output
-y = df.iloc[:, yIndex].values
+df = pd.read_csv(os.path.join("Datasets", data))
+x = df.drop(columns=outputCols).values
+y = df[output].values  # Selecting output
 
 # 80% data to train, 20% leave for testing.
-trainSize = min(setSize, int(0.8 * len(x)), len(x))
+trainSize = int(0.8 * len(x))
 xTrain, xTest, yTrain, yTest = train_test_split(x, y, train_size=trainSize, random_state=randomState)
 
 # Scaling data
@@ -52,24 +54,29 @@ param_grid = {
     "normalize_y": [True],
     "optimizer": ["fmin_l_bfgs_b"],
 }
-gridSearch = GridSearchCV(GaussianProcessRegressor(), param_grid, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+gridSearch = GridSearchCV(GaussianProcessRegressor(), param_grid, cv=5, scoring='neg_mean_squared_error',
+                          n_jobs=-1)  # Optimizing with MSE
 gridSearch.fit(xTrainScaled, yTrain)
 print("Best GPR Parameters:", gridSearch.best_params_)
 bestGPR = gridSearch.best_estimator_
 trainScore = bestGPR.score(xTrainScaled, yTrain)
-print("Train Set Score (R^2):", trainScore)
 testScore = bestGPR.score(xTestScaled, yTest)
+yTrainPredict = bestGPR.predict(xTrainScaled)
+trainMSE = mean_squared_error(yTrain, yTrainPredict)
+trainRMSE = np.sqrt(trainMSE)
+print("Train Set MSE:", trainMSE)
+print("Train Set RMSE:", trainRMSE)
+print("Train Set Score (R^2):", trainScore)
 print("Test Set Score (R^2):", testScore)
 
 # GPR model making predictions
 yPredict = bestGPR.predict(xTestScaled)
 mseCurrent = mean_squared_error(yTest, yPredict)
 rmseCurrent = np.sqrt(mseCurrent)
-mapeCurrent = np.mean(np.abs((yTest - yPredict) / yTest))
+mapeCurrent = mean_absolute_percentage_error(yTest, yPredict)
 evCurrent = explained_variance_score(yTest, yPredict)
 currentModelScore = bestGPR.score(xTestScaled, yTest)
 print("Current Model Dataset:", data)
-print("Current Model Training Size:", setSize)
 print("Random State:", randomState)
 print("Current Model MSE:", mseCurrent)
 print("Current Model RMSE:", rmseCurrent)
@@ -84,7 +91,7 @@ sns.scatterplot(x=yTest, y=yPredict, color="blue", s=50, edgecolor='black', alph
 min_val = min(min(yTest), min(yPredict))
 max_val = max(max(yTest), max(yPredict))
 plt.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2, label="Perfect Fit (y = x)")
-plt.title("GPR Model - " + ("Film-Thickness" if yIndex == -2 else "N/Ti Ratio"), fontsize=16)
+plt.title(f"GPR Model - {data} - {output}", fontsize=16)
 plt.xlabel("Measurements", fontsize=14)
 plt.ylabel("GPR Predictions", fontsize=14)
 plt.legend()
